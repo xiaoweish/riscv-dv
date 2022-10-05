@@ -693,6 +693,8 @@ package riscv_instr_pkg;
     CS_FORMAT,
     CSS_FORMAT,
     CIW_FORMAT,
+    ZCPP_FORMAT,
+    ZCMV_FORMAT,
     // Vector instruction format
     VSET_FORMAT,
     VA_FORMAT,
@@ -741,6 +743,7 @@ package riscv_instr_pkg;
     TRAP,
     INTERRUPT,
     `VECTOR_INCLUDE("riscv_instr_pkg_inc_riscv_instr_category_t.sv")
+    STACK,
     AMO // (last one)
   } riscv_instr_category_t;
 
@@ -1487,6 +1490,8 @@ package riscv_instr_pkg;
                            S7, S8, S9, S10, S11, T3, T4, T5, T6};
 
   riscv_reg_t compressed_gpr[] = {S0, S1, A0, A1, A2, A3, A4, A5};
+
+  riscv_reg_t compressed_sreg_gpr[] = {S0, S1, S2, S3, S4, S5, S6, S7};
 
   riscv_instr_category_t all_categories[] = {
     LOAD, STORE, SHIFT, ARITHMETIC, LOGICAL, COMPARE, BRANCH, JUMP,
