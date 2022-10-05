@@ -35,8 +35,8 @@ class riscv_compressed_instr extends riscv_instr;
       }
     }
     if (instr_name inside { CM_MVA01S, CM_MVSA01 }) {
-      sreg1 inside compressed_sreg_gpr;
-      sreg2 inside compressed_sreg_gpr;
+      sreg1 inside {compressed_sreg_gpr};
+      sreg2 inside {compressed_sreg_gpr};
       sreg1 != sreg2;
       solve sreg1 before sreg2;
     }
@@ -64,12 +64,12 @@ class riscv_compressed_instr extends riscv_instr;
     if (instr_name == C_ADDI4SPN) {
       imm[1:0] == 0;
     }
-   if (instr_name inside {CM_JT}) begin
+   if (instr_name inside {CM_JT}){
      imm[10:6] == 5'b0_0000;
-   end
-   if (instr_name inside {CM_JALT}) begin
+   }
+   if (instr_name inside {CM_JALT}){
      imm[10:8] == 3'b000;
-   end
+   }
   }
 
   // C_JAL is RV32C only instruction
