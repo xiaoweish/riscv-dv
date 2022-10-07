@@ -96,6 +96,10 @@ class riscv_instr extends uvm_object;
     instr_names.delete();
     instr_group.delete();
     instr_category.delete();
+    // RV32ZCA is equivalent to riscv-dv RV32C)
+    if (RV32ZCA inside {supported_isa}) begin
+      supported_isa.push_back(RV32C);
+    end
     foreach (instr_registry[instr_name]) begin
       riscv_instr instr_inst;
       if (instr_name inside {unsupported_instr}) continue;
@@ -111,7 +115,7 @@ class riscv_instr extends uvm_object;
       if (cfg.no_fence && (instr_name inside {FENCE, FENCE_I, SFENCE_VMA})) continue;
       if ((instr_inst.group inside {supported_isa}) &&
           !(cfg.disable_compressed_instr &&
-            (instr_inst.group inside {RV32C, RV64C, RV32DC, RV32FC, RV128C})) &&
+            (instr_inst.group inside {RV32C, RV64C, RV32DC, RV32FC, RV128C, RV32ZCA, RV32ZCB, RV32ZCMT, RV32ZCMP})) &&
           !(!cfg.enable_floating_point &&
             (instr_inst.group inside {RV32F, RV64F, RV32D, RV64D})) &&
           !(!cfg.enable_vector_extension &&

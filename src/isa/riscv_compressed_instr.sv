@@ -19,7 +19,32 @@ class riscv_compressed_instr extends riscv_instr;
   int imm_align;
   rand riscv_reg_t sreg1;
   rand riscv_reg_t sreg2;
+  rand logic [1:0] spimm;
   rand logic [3:0] rlist;
+
+  function integer unsigned get_stack_adj(logic [3:0] rlist, logic [1:0] spimm);
+    integer unsigned stack_adj_base;
+    if (XLEN == 32) begin
+      // RV32I
+      case (rlist) inside
+        [4:7]   : stack_adj_base = 16;
+        [8:11]  : stack_adj_base = 32;
+        [12:14] : stack_adj_base = 48;
+        15      : stack_adj_base = 64;
+      endcase
+    end
+    return stack_adj_base + ( spimm * 16 );
+  endfunction : get_stack_adj
+
+  constraint rvzcmp_rlist_c {
+    // TODO RV32E?
+    if(XLEN == 32) {
+      rlist inside {[4:15]};
+      // strongly bias no additional stack pointer adjustment to avoid exhausting stack
+      // TODO silabs-hfegran: need to check implications of sp adjustment on rvdv tests
+      spimm dist {0:=20, 1:=1, 2:=1, 3:=1};
+    }
+  }
 
   constraint rvc_csr_c {
     //  Registers specified by the three-bit rs1’, rs2’, and rd’
@@ -170,6 +195,9 @@ class riscv_compressed_instr extends riscv_instr;
       CA_FORMAT: begin
         has_rs1 = 1'b0;
         has_imm = 1'b0;
+        if (group inside {RV32ZCB} && instr_name != C_MUL) begin
+          has_rs2 = 1'b0;
+        end
       end
       CI_FORMAT, CIW_FORMAT: begin
         has_rs1 = 1'b0;
@@ -212,7 +240,12 @@ class riscv_compressed_instr extends riscv_instr;
           else
             asm_str = $sformatf("%0s%0s, %0s", asm_str, rs1.name(), rs2.name());
         CA_FORMAT:
-          asm_str = $sformatf("%0s%0s, %0s", asm_str, rd.name(), rs2.name());
+          if (group inside {RV32ZCB} && instr_name != C_MUL) begin
+            asm_str = $sformatf("%0s%0s", asm_str, rd.name());
+          end
+          else begin
+            asm_str = $sformatf("%0s%0s, %0s", asm_str, rd.name(), rs2.name());
+          end
         CB_FORMAT:
           asm_str = $sformatf("%0s%0s, %0s", asm_str, rs1.name(), get_imm());
         CSS_FORMAT:
@@ -363,13 +396,13 @@ class riscv_compressed_instr extends riscv_instr;
       C_MUL:
         binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b10, rs2, get_c_opcode()});
       CM_PUSH:
-        binary = $sformatf("%4h", {get_func3(), 5'b1_1000, rlist, spimm[5:4], get_c_opcode()});
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1000, rlist, get_stack_adj(rlist, spimm), get_c_opcode()});
       CM_POP:
-        binary = $sformatf("%4h", {get_func3(), 5'b1_1010, rlist, spimm[5:4], get_c_opcode()});
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1010, rlist, get_stack_adj(rlist, spimm), get_c_opcode()});
       CM_POPRETZ:
-        binary = $sformatf("%4h", {get_func3(), 5'b1_1100, rlist, spimm[5:4], get_c_opcode()});
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1100, rlist, get_stack_adj(rlist, spimm), get_c_opcode()});
       CM_POPRET:
-        binary = $sformatf("%4h", {get_func3(), 5'b1_1110, rlist, spimm[5:4], get_c_opcode()});
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1110, rlist, get_stack_adj(rlist, spimm), get_c_opcode()});
       CM_MVSA01:
         binary = $sformatf("%4h", {get_func3(), 3'b011, sreg1, 2'b01, sreg2, get_c_opcode()});
       CM_MVA01S:

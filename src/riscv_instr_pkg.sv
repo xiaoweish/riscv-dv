@@ -80,7 +80,7 @@ package riscv_instr_pkg;
     MACHINE_MODE    = 2'b11
   } privileged_mode_t;
 
-  typedef enum bit [4:0] {
+  typedef enum bit [5:0] {
     RV32I,
     RV64I,
     RV32M,
@@ -109,7 +109,11 @@ package riscv_instr_pkg;
     RV64ZBC,
     RV64ZBS,
     RV32X,
-    RV64X
+    RV64X,
+    RV32ZCA,
+    RV32ZCB,
+    RV32ZCMP,
+    RV32ZCMT
   } riscv_instr_group_t;
 
   typedef enum {
@@ -365,7 +369,7 @@ package riscv_instr_pkg;
     SLLW,
     SRLW,
     SRAW,
-    // RV32C
+    // RV32C, RV32ZCA
     C_LW,
     C_SW,
     C_LWSP,
@@ -393,6 +397,30 @@ package riscv_instr_pkg;
     C_JAL,
     C_JR,
     C_JALR,
+    // RV32ZCB
+    C_LBU,
+    C_LHU,
+    C_LH,
+    C_SB,
+    C_SH,
+    C_ZEXT_B,
+    C_SEXT_B,
+    C_ZEXT_H,
+    C_SEXT_H,
+    C_NOT,
+    C_MUL,
+    // RV64ZCB
+    C_ZEXT_W,
+    // RV32ZCMP
+    CM_PUSH,
+    CM_POP,
+    CM_POPRET,
+    CM_POPRETZ,
+    CM_MVA01S,
+    CM_MVSA01,
+    // RV32ZCMT
+    CM_JT,
+    CM_JALT,
     // RV64C
     C_ADDIW,
     C_SUBW,
@@ -1552,7 +1580,6 @@ package riscv_instr_pkg;
   `include "isa/rv32zbb_instr.sv"
   `include "isa/rv32zbc_instr.sv"
   `include "isa/rv32zbs_instr.sv"
-  `include "isa/rv32zca_instr.sv"
   `include "isa/rv32zcb_instr.sv"
   `include "isa/rv32zcmp_instr.sv"
   `include "isa/rv32zcmt_instr.sv"

@@ -626,7 +626,11 @@ class riscv_instr_gen_config extends uvm_object;
     cmdline_enum_processor #(riscv_instr_group_t)::get_array_values("+march=", 1'b0, march_isa);
     if (march_isa.size != 0) riscv_instr_pkg::supported_isa = march_isa;
 
-    if (!(RV32C inside {supported_isa})) begin
+    if (!(RV32C inside {supported_isa}) &&
+        !(RV32ZCA inside {supported_isa}) &&
+        !(RV32ZCB inside {supported_isa}) &&
+        !(RV32ZCMP inside {supported_isa}) &&
+        !(RV32ZCMT inside {supported_isa}))
       disable_compressed_instr = 1;
     end
 
