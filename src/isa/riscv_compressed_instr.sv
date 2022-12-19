@@ -60,7 +60,7 @@ class riscv_compressed_instr extends riscv_instr;
       rlist inside {[4:15]};
       // strongly bias no additional stack pointer adjustment to avoid exhausting stack
       // TODO silabs-hfegran: need to check implications of sp adjustment on rvdv tests
-      spimm dist {0:=0, 1:=0, 2:=0, 3:=100};
+      soft spimm dist {0:=100, 1:=10, 2:=10, 3:=10};
     }
   }
 
