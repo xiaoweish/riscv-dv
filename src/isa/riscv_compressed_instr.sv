@@ -109,11 +109,13 @@ class riscv_compressed_instr extends riscv_instr;
     }
    if (instr_name inside {CM_JT}){
      imm[10:6] == 5'b0_0000;
-     imm[5:0] inside {[0:63]};
+     // TODO: this is wrong, should be legal, but decode differently
+     imm[5:0] inside {[0:31]};
    }
    if (instr_name inside {CM_JALT}){
      imm[10:8] == 3'b000;
-     imm[7:0] inside {[64:255]};
+     // TODO: this is wrong, should be legal, but decode differently
+     imm[7:0] inside {[32:255]};
    }
    if (instr_name inside {C_LBU, C_SB}){
      imm[5:2] == 3'b000;

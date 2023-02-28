@@ -114,8 +114,10 @@ class riscv_instr extends uvm_object;
       if (!cfg.enable_sfence && instr_name == SFENCE_VMA) continue;
       if (cfg.no_fence && (instr_name inside {FENCE, FENCE_I, SFENCE_VMA})) continue;
       if ((instr_inst.group inside {supported_isa}) &&
+          !(instr_inst.group == RV32ZCBB && !(RV32ZBB inside {supported_isa})) &&
+          !(instr_inst.group == RV32ZCBM && !(RV32M inside {supported_isa})) &&
           !(cfg.disable_compressed_instr &&
-            (instr_inst.group inside {RV32C, RV64C, RV32DC, RV32FC, RV128C, RV32ZCA, RV32ZCB, RV32ZCMT, RV32ZCMP})) &&
+            (instr_inst.group inside {RV32C, RV64C, RV32DC, RV32FC, RV128C, RV32ZCA, RV32ZCB, RV32ZCBB, RV32ZCBM, RV32ZCMT, RV32ZCMP})) &&
           !(!cfg.enable_floating_point &&
             (instr_inst.group inside {RV32F, RV64F, RV32D, RV64D})) &&
           !(!cfg.enable_vector_extension &&
