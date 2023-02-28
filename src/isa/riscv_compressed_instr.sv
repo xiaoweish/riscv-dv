@@ -224,7 +224,7 @@ class riscv_compressed_instr extends riscv_instr;
       CA_FORMAT: begin
         has_rs1 = 1'b0;
         has_imm = 1'b0;
-        if (group inside {RV32ZCB} && instr_name != C_MUL) begin
+        if (group inside {RV32ZCB, RV32ZCBB}) begin
           has_rs2 = 1'b0;
         end
       end
@@ -269,7 +269,7 @@ class riscv_compressed_instr extends riscv_instr;
           else
             asm_str = $sformatf("%0s%0s, %0s", asm_str, rs1.name(), rs2.name());
         CA_FORMAT:
-          if (group inside {RV32ZCB} && instr_name != C_MUL) begin
+          if (group inside {RV32ZCB, RV32ZCBB}) begin
             asm_str = $sformatf("%0s%0s", asm_str, rd.name());
           end
           else begin
