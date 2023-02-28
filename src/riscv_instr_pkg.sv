@@ -112,6 +112,8 @@ package riscv_instr_pkg;
     RV64X,
     RV32ZCA,
     RV32ZCB,
+    RV32ZCBB,
+    RV32ZCBM,
     RV32ZCMP,
     RV32ZCMT
   } riscv_instr_group_t;
