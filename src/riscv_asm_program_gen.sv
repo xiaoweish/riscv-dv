@@ -955,6 +955,24 @@ class riscv_asm_program_gen extends uvm_object;
   endfunction
 
   //---------------------------------------------------------------------------------------
+  // Generate mtvt table
+  //---------------------------------------------------------------------------------------
+  virtual function void gen_mtvt_table(int hart);
+    string instr[$];
+
+    instr_stream.push_back($sformatf(".align 7"));
+    for  (int i = 0; i < 255; i++) begin
+      instr = {instr,
+               $sformatf("idx_%0d: .long . + %0d", i, (255 - i)*4)
+      };
+    end
+
+    instr = {instr, $sformatf("j mtvec_handler")};
+
+    gen_section(get_label("__mtvt_table", hart), instr);
+  endfunction : gen_mtvt_table
+
+  //---------------------------------------------------------------------------------------
   // Exception handling routine
   //---------------------------------------------------------------------------------------
 
@@ -1107,6 +1125,10 @@ class riscv_asm_program_gen extends uvm_object;
              $sformatf("jalr x1, x%0d, 0", cfg.scratch_reg)
            };
     gen_section(get_label($sformatf("%0smode_exception_handler", mode), hart), instr);
+
+    if (cfg.mtvec_mode == CLIC) begin
+      gen_mtvt_table(hart);
+    end
   endfunction
 
   // Generate for interrupt vector table

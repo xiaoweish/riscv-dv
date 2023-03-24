@@ -189,6 +189,8 @@ class riscv_instr_gen_config extends uvm_object;
   // Enable interrupt bit in MSTATUS (MIE, SIE, UIE)
   bit                    enable_interrupt;
   bit                    enable_nested_interrupt;
+  // Enable clic interrupt support (note: disables clint support)
+  bit                    enable_clic;
   // We need a separate control knob for enabling timer interrupts, as Spike
   // throws an exception if xIE.xTIE is enabled
   bit                    enable_timer_irq;
@@ -336,6 +338,15 @@ class riscv_instr_gen_config extends uvm_object;
                                  riscv_instr_pkg::supported_privileged_mode[2] := 3};
     } else {
       init_privileged_mode == riscv_instr_pkg::supported_privileged_mode[0];
+    }
+  }
+
+  constraint mtvec_mode_c {
+    if (enable_clic == 1) {
+      mtvec_mode == CLIC;
+    }
+    else {
+      mtvec_mode inside { DIRECT, VECTORED };
     }
   }
 
@@ -507,6 +518,7 @@ class riscv_instr_gen_config extends uvm_object;
     `uvm_field_string(boot_mode_opts, UVM_DEFAULT)
     `uvm_field_int(enable_page_table_exception, UVM_DEFAULT)
     `uvm_field_int(no_directed_instr, UVM_DEFAULT)
+    `uvm_field_int(enable_clic, UVM_DEFAULT)
     `uvm_field_int(enable_interrupt, UVM_DEFAULT)
     `uvm_field_int(enable_timer_irq, UVM_DEFAULT)
     `uvm_field_int(bare_program_mode, UVM_DEFAULT)
@@ -608,6 +620,7 @@ class riscv_instr_gen_config extends uvm_object;
     get_bool_arg_value("+set_mstatus_mprv=", set_mstatus_mprv);
     get_bool_arg_value("+enable_floating_point=", enable_floating_point);
     get_bool_arg_value("+enable_vector_extension=", enable_vector_extension);
+    get_bool_arg_value("+enable_clic=", enable_clic);
     get_bool_arg_value("+enable_b_extension=", enable_b_extension);
     get_bool_arg_value("+enable_zba_extension=", enable_zba_extension);
     get_bool_arg_value("+enable_zbb_extension=", enable_zbb_extension);
