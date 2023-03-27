@@ -742,6 +742,11 @@ class riscv_asm_program_gen extends uvm_object;
     // Setup kerenal stack pointer
     str = {$sformatf("la x%0d, %0skernel_stack_end", cfg.tp, hart_prefix(hart))};
     gen_section(get_label("kernel_sp", hart), str);
+
+    // Init stack pointer to point to the end of the user stack
+    str = {indent, $sformatf("la x%0d, %0suser_stack_end", cfg.sp, hart_prefix(hart))};
+    gen_section(get_label("user_sp", hart), str);
+
     // Setup interrupt and exception delegation
     if(!cfg.no_delegation && (cfg.init_privileged_mode != MACHINE_MODE)) begin
       gen_delegation(hart);

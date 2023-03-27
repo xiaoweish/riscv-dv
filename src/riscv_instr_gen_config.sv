@@ -436,8 +436,8 @@ class riscv_instr_gen_config extends uvm_object;
       sp == SP;
     }
     sp != tp;
-    !(sp inside {GP, RA, ZERO});
-    !(tp inside {GP, RA, ZERO});
+    !(sp inside {GP, RA, ZERO, A0});
+    !(tp inside {GP, RA, ZERO, A0});
   }
 
   // This reg is used in various places throughout the generator,
@@ -741,7 +741,7 @@ class riscv_instr_gen_config extends uvm_object;
 
   function void post_randomize();
     // Setup the list all reserved registers
-    reserved_regs = {tp, sp, scratch_reg};
+    reserved_regs = {tp, sp, scratch_reg, A0};
     // Need to save all loop registers, and RA/T0
     min_stack_len_per_program = 128 * (XLEN/8);
     // Check if the setting is legal
