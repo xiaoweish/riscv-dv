@@ -62,7 +62,8 @@ package riscv_instr_pkg;
 
   typedef enum bit [1:0] {
     DIRECT   = 2'b00,
-    VECTORED = 2'b01
+    VECTORED = 2'b01,
+    CLIC     = 2'b11
   } mtvec_mode_t;
 
   typedef enum bit [2:0] {
@@ -80,7 +81,7 @@ package riscv_instr_pkg;
     MACHINE_MODE    = 2'b11
   } privileged_mode_t;
 
-  typedef enum bit [4:0] {
+  typedef enum bit [5:0] {
     RV32I,
     RV64I,
     RV32M,
@@ -109,7 +110,13 @@ package riscv_instr_pkg;
     RV64ZBC,
     RV64ZBS,
     RV32X,
-    RV64X
+    RV64X,
+    RV32ZCA,
+    RV32ZCB,
+    RV32ZCBB,
+    RV32ZCBM,
+    RV32ZCMP,
+    RV32ZCMT
   } riscv_instr_group_t;
 
   typedef enum {
@@ -365,7 +372,7 @@ package riscv_instr_pkg;
     SLLW,
     SRLW,
     SRAW,
-    // RV32C
+    // RV32C, RV32ZCA
     C_LW,
     C_SW,
     C_LWSP,
@@ -393,6 +400,30 @@ package riscv_instr_pkg;
     C_JAL,
     C_JR,
     C_JALR,
+    // RV32ZCB
+    C_LBU,
+    C_LHU,
+    C_LH,
+    C_SB,
+    C_SH,
+    C_ZEXT_B,
+    C_SEXT_B,
+    C_ZEXT_H,
+    C_SEXT_H,
+    C_NOT,
+    C_MUL,
+    // RV64ZCB
+    C_ZEXT_W,
+    // RV32ZCMP
+    CM_PUSH,
+    CM_POP,
+    CM_POPRET,
+    CM_POPRETZ,
+    CM_MVA01S,
+    CM_MVSA01,
+    // RV32ZCMT
+    CM_JT,
+    CM_JALT,
     // RV64C
     C_ADDIW,
     C_SUBW,
@@ -693,6 +724,8 @@ package riscv_instr_pkg;
     CS_FORMAT,
     CSS_FORMAT,
     CIW_FORMAT,
+    ZCPP_FORMAT,
+    ZCMV_FORMAT,
     // Vector instruction format
     VSET_FORMAT,
     VA_FORMAT,
@@ -741,6 +774,7 @@ package riscv_instr_pkg;
     TRAP,
     INTERRUPT,
     `VECTOR_INCLUDE("riscv_instr_pkg_inc_riscv_instr_category_t.sv")
+    STACK,
     AMO // (last one)
   } riscv_instr_category_t;
 
@@ -833,6 +867,7 @@ package riscv_instr_pkg;
     SIE             = 'h104,  // Supervisor interrupt-enable register
     STVEC           = 'h105,  // Supervisor trap-handler base address
     SCOUNTEREN      = 'h106,  // Supervisor counter enable
+    STVT            = 'h107,  // Supervisor trap-handler vector table base address
     // Supervisor Configuration
     SENVCFG         = 'h10A,  // Supervisor environment configuration register
     // Supervisor Trap Handling
@@ -841,6 +876,11 @@ package riscv_instr_pkg;
     SCAUSE          = 'h142,  // Supervisor trap cause
     STVAL           = 'h143,  // Supervisor bad address or instruction
     SIP             = 'h144,  // Supervisor interrupt pending
+    SNXTI           = 'h145,  // Supervisor interrupt handler address and enable modifier
+    SINSTATUS       = 'h146,  // Supervisor current interrupt levels
+    SINTTHRESH      = 'h147,  // Supervisor interrupt-level threshold
+    SSCRATCHCSW     = 'h148,  // Supervisor conditional scratch swap on priv mode change
+    SSCRATCHCSWL    = 'h149,  // Supervisor conditional scratch swap on priv level change
     // Supervisor Protection and Translation
     SATP            = 'h180,  // Supervisor address translation and protection
     // Supervisor Debug/Trace Register
@@ -893,6 +933,7 @@ package riscv_instr_pkg;
     MIE             = 'h304,  // Machine interrupt-enable register
     MTVEC           = 'h305,  // Machine trap-handler base address
     MCOUNTEREN      = 'h306,  // Machine counter enable
+    MTVT            = 'h307,  // Machine trap-handler vector table base address
     MSTATUSH        = 'h310,  // Additional machine status register, RV32 only
     // Machine Trap Handling
     MSCRATCH        = 'h340,  // Scratch register for machine trap handlers
@@ -900,6 +941,11 @@ package riscv_instr_pkg;
     MCAUSE          = 'h342,  // Machine trap cause
     MTVAL           = 'h343,  // Machine bad address or instruction
     MIP             = 'h344,  // Machine interrupt pending
+    MNXTI           = 'h345,  // Machine interrupt handler address and enable modifier
+    MINSTATUS       = 'h346,  // Machine current interrupt levels
+    MINTTHRESH      = 'h347,  // Machine interrupt-level threshold
+    MSCRATCHCSW     = 'h348,  // Machine conditional scratch swap on priv mode change
+    MSCRATCHCSWL    = 'h349,  // Machine conditional scratch swap on priv level change
     // Machine Configuration
     MENVCFG         = 'h30A,  // Machine environment configuration register
     MENVCFGH        = 'h31A,  // Additional machine env. conf. register, RV32 only
@@ -1498,6 +1544,8 @@ package riscv_instr_pkg;
 
   riscv_reg_t compressed_gpr[] = {S0, S1, A0, A1, A2, A3, A4, A5};
 
+  riscv_reg_t compressed_sreg_gpr[] = {S0, S1, S2, S3, S4, S5, S6, S7};
+
   riscv_instr_category_t all_categories[] = {
     LOAD, STORE, SHIFT, ARITHMETIC, LOGICAL, COMPARE, BRANCH, JUMP,
     SYNCH, SYSTEM, COUNTER, CSR, CHANGELEVEL, TRAP, INTERRUPT, AMO
@@ -1557,6 +1605,9 @@ package riscv_instr_pkg;
   `include "isa/rv32zbb_instr.sv"
   `include "isa/rv32zbc_instr.sv"
   `include "isa/rv32zbs_instr.sv"
+  `include "isa/rv32zcb_instr.sv"
+  `include "isa/rv32zcmp_instr.sv"
+  `include "isa/rv32zcmt_instr.sv"
   `include "isa/rv32m_instr.sv"
   `include "isa/rv64a_instr.sv"
   `include "isa/rv64b_instr.sv"

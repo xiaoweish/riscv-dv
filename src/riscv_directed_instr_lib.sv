@@ -94,7 +94,7 @@ class riscv_mem_access_stream extends riscv_directed_instr_stream;
 endclass
 
 // Jump instruction (JAL, JALR)
-// la rd0, jump_tagert_label
+// la rd0, jump_target_label
 // addi rd1, offset, rd0
 // jalr rd, offset, rd1
 // For JAL, restore the stack before doing the jump
@@ -474,7 +474,7 @@ class riscv_int_numeric_corner_stream extends riscv_directed_instr_stream;
     for (int i = 0; i < num_of_instr; i++) begin
       riscv_instr instr = riscv_instr::get_rand_instr(
         .include_category({ARITHMETIC}),
-        .exclude_group({RV32C, RV64C, RV32F, RV64F, RV32D, RV64D}));
+        .exclude_group({RV32C, RV32ZCA, RV32ZCB, RV32ZCBB, RV32ZCBM, RV32ZCMP, RV32ZCMT, RV64C, RV32F, RV64F, RV32D, RV64D}));
       randomize_gpr(instr);
       instr_list.push_back(instr);
     end

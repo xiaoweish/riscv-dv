@@ -244,11 +244,19 @@ class riscv_illegal_instr extends uvm_object;
       (reserved_c == kReservedAddispn)   -> ((instr_bin[15:5] == '0) && (c_op == 2'b00));
       (reserved_c == kReservedAddiw)     -> ((c_msb == 3'b001) && (c_op == 2'b01) &&
                                              (instr_bin[11:7] == 5'b0));
-      (reserved_c == kReservedC0)        -> ((instr_bin[15:10] == 6'b100111) &&
-                                             (instr_bin[6:5] == 2'b10) && (c_op == 2'b01));
-      (reserved_c == kReservedC1)        -> ((instr_bin[15:10] == 6'b100111) &&
-                                             (instr_bin[6:5] == 2'b11) && (c_op == 2'b01));
-      (reserved_c == kReservedC2)        -> ((c_msb == 3'b100) && (c_op == 2'b00));
+      if (RV32ZCB inside { supported_isa }) {
+        (reserved_c == kReservedC2)        -> ((c_msb == 3'b100) && (c_op == 2'b00) &&
+                                               (instr_bin[12:10] == 3'b111));
+        // Formerly reserved, now used for Zcb
+        (reserved_c != kReservedC0);
+        (reserved_c != kReservedC1);
+      } else {
+        (reserved_c == kReservedC0)        -> ((instr_bin[15:10] == 6'b100111) &&
+                                               (instr_bin[6:5] == 2'b10) && (c_op == 2'b01));
+        (reserved_c == kReservedC1)        -> ((instr_bin[15:10] == 6'b100111) &&
+                                               (instr_bin[6:5] == 2'b11) && (c_op == 2'b01));
+        (reserved_c == kReservedC2)        -> ((c_msb == 3'b100) && (c_op == 2'b00));
+      }
       (reserved_c == kReservedAddi16sp)  -> ((c_msb == 3'b011) && (c_op == 2'b01) &&
                                              (instr_bin[11:7] == 2) &&
                                              !instr_bin[12] && (instr_bin[6:2] == 0));
@@ -401,6 +409,13 @@ class riscv_illegal_instr extends uvm_object;
     if (riscv_instr_pkg::RV64I inside {riscv_instr_pkg::supported_isa}) begin
       legal_c00_opcode = {legal_c00_opcode, 3'b011, 3'b111};
       legal_c10_opcode = {legal_c10_opcode, 3'b011, 3'b111};
+    end
+    if (riscv_instr_pkg::RV32ZCMT inside {riscv_instr_pkg::supported_isa} ||
+        riscv_instr_pkg::RV32ZCMP inside {riscv_instr_pkg::supported_isa}) begin
+      legal_c10_opcode = {legal_c10_opcode, 3'b101};
+    end
+    if (riscv_instr_pkg::RV32ZCB inside {riscv_instr_pkg::supported_isa}) begin
+      legal_c00_opcode = {legal_c00_opcode, 3'b100};
     end
     csr = csr.first();
     for (int i = 0; i < csr.num(); i = i + 1) begin

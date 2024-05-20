@@ -17,6 +17,52 @@
 class riscv_compressed_instr extends riscv_instr;
 
   int imm_align;
+  rand riscv_reg_t sreg1;
+  rand riscv_reg_t sreg2;
+  rand logic [1:0] spimm;
+  rand logic [3:0] rlist;
+
+  function integer unsigned get_stack_adj();
+    integer unsigned stack_adj_base;
+    if (XLEN == 32) begin
+      // RV32I
+      case (rlist) inside
+        [4:7]   : stack_adj_base = 16;
+        [8:11]  : stack_adj_base = 32;
+        [12:14] : stack_adj_base = 48;
+        15      : stack_adj_base = 64;
+      endcase
+    end
+    return stack_adj_base + ( spimm << 4 );
+  endfunction : get_stack_adj
+
+  function string get_reg_list();
+    case (rlist)
+       4: get_reg_list = "{ra}";
+       5: get_reg_list = "{ra, s0}";
+       6: get_reg_list = "{ra, s0-s1}";
+       7: get_reg_list = "{ra, s0-s2}";
+       8: get_reg_list = "{ra, s0-s3}";
+       9: get_reg_list = "{ra, s0-s4}";
+      10: get_reg_list = "{ra, s0-s5}";
+      11: get_reg_list = "{ra, s0-s6}";
+      12: get_reg_list = "{ra, s0-s7}";
+      13: get_reg_list = "{ra, s0-s8}";
+      14: get_reg_list = "{ra, s0-s9}";
+      15: get_reg_list = "{ra, s0-s11}";
+      default: ;
+    endcase
+  endfunction : get_reg_list
+
+  constraint rvzcmp_rlist_c {
+    // TODO RV32E?
+    if(XLEN == 32) {
+      rlist inside {[4:15]};
+      // strongly bias no additional stack pointer adjustment to avoid exhausting stack
+      // TODO silabs-hfegran: need to check implications of sp adjustment on rvdv tests
+      soft spimm dist {0:=100, 1:=10, 2:=10, 3:=10};
+    }
+  }
 
   constraint rvc_csr_c {
     //  Registers specified by the three-bit rs1’, rs2’, and rd’
@@ -30,6 +76,12 @@ class riscv_compressed_instr extends riscv_instr;
       if (has_rd) {
         rd inside {[S0:A5]};
       }
+    }
+    if (instr_name inside { CM_MVA01S, CM_MVSA01 }) {
+      sreg1 inside {compressed_sreg_gpr};
+      sreg2 inside {compressed_sreg_gpr};
+      sreg1 != sreg2;
+      solve sreg1 before sreg2;
     }
     // C_ADDI16SP is only valid when rd == SP
     if (instr_name == C_ADDI16SP) {
@@ -55,6 +107,21 @@ class riscv_compressed_instr extends riscv_instr;
     if (instr_name == C_ADDI4SPN) {
       imm[1:0] == 0;
     }
+   if (instr_name inside {CM_JT}){
+     imm[10:6] == 5'b0_0000;
+     imm[5:0] inside {[0:31]};
+   }
+   if (instr_name inside {CM_JALT}){
+     imm[10:8] == 3'b000;
+     imm[7:0] inside {[32:255]};
+   }
+   if (instr_name inside {C_LBU, C_SB}){
+     imm[5:2] == 3'b000;
+   }
+   if (instr_name inside {C_LHU, C_LH, C_SH}){
+     imm[5:2] == 3'b000;
+     imm[0] == 1'b0;
+   }
   }
 
   // C_JAL is RV32C only instruction
@@ -155,6 +222,9 @@ class riscv_compressed_instr extends riscv_instr;
       CA_FORMAT: begin
         has_rs1 = 1'b0;
         has_imm = 1'b0;
+        if (group inside {RV32ZCB, RV32ZCBB}) begin
+          has_rs2 = 1'b0;
+        end
       end
       CI_FORMAT, CIW_FORMAT: begin
         has_rs1 = 1'b0;
@@ -197,7 +267,12 @@ class riscv_compressed_instr extends riscv_instr;
           else
             asm_str = $sformatf("%0s%0s, %0s", asm_str, rs1.name(), rs2.name());
         CA_FORMAT:
-          asm_str = $sformatf("%0s%0s, %0s", asm_str, rd.name(), rs2.name());
+          if (group inside {RV32ZCB, RV32ZCBB}) begin
+            asm_str = $sformatf("%0s%0s", asm_str, rd.name());
+          end
+          else begin
+            asm_str = $sformatf("%0s%0s, %0s", asm_str, rd.name(), rs2.name());
+          end
         CB_FORMAT:
           asm_str = $sformatf("%0s%0s, %0s", asm_str, rs1.name(), get_imm());
         CSS_FORMAT:
@@ -213,6 +288,14 @@ class riscv_compressed_instr extends riscv_instr;
           end
         CJ_FORMAT:
           asm_str = $sformatf("%0s%0s", asm_str, get_imm());
+        ZCPP_FORMAT:
+          if (instr_name inside {CM_PUSH}) begin
+            asm_str = $sformatf("%0s%0s, -%0d", asm_str, get_reg_list(), get_stack_adj());
+          end else begin
+            asm_str = $sformatf("%0s%0s, %0d", asm_str, get_reg_list(), get_stack_adj());
+          end
+        ZCMV_FORMAT:
+          asm_str = $sformatf("%0s%0s, %0s", asm_str, sreg1.name, sreg2.name);
         default: `uvm_info(`gfn, $sformatf("Unsupported format %0s", format.name()), UVM_LOW)
       endcase
     end else begin
@@ -323,6 +406,46 @@ class riscv_compressed_instr extends riscv_instr;
         binary = $sformatf("%4h", {get_func3(), imm[5:4], imm[9:6], rs2, get_c_opcode()});
       C_SWSP:
         binary = $sformatf("%4h", {get_func3(), imm[5:2], imm[7:6], rs2, get_c_opcode()});
+      C_LBU:
+        binary = $sformatf("%4h", {get_func3(), 3'b0, rs1, imm[0], imm[1], rd, get_c_opcode()});
+      C_LHU:
+        binary = $sformatf("%4h", {get_func3(), 3'b1, rs1, 1'b0, imm[1], rd, get_c_opcode()});
+      C_LH:
+        binary = $sformatf("%4h", {get_func3(), 3'b1, rs1, 1'b1, imm[1], rd, get_c_opcode()});
+      C_SB:
+        binary = $sformatf("%4h", {get_func3(), 3'b10, rs1, imm[0], imm[1], rs2, get_c_opcode()});
+      C_SH:
+        binary = $sformatf("%4h", {get_func3(), 3'b11, rs1, 1'b0, imm[1], rs2, get_c_opcode()});
+      C_ZEXT_B:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b0, get_c_opcode()});
+      C_SEXT_B:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b1, get_c_opcode()});
+      C_ZEXT_H:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b10, get_c_opcode()});
+      C_SEXT_H:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b11, get_c_opcode()});
+      C_ZEXT_W:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b100, get_c_opcode()});
+      C_NOT:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b11, 3'b101, get_c_opcode()});
+      C_MUL:
+        binary = $sformatf("%4h", {get_func3(), 3'b111, rd, 2'b10, rs2, get_c_opcode()});
+      CM_PUSH:
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1000, rlist, get_stack_adj(), get_c_opcode()});
+      CM_POP:
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1010, rlist, get_stack_adj(), get_c_opcode()});
+      CM_POPRETZ:
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1100, rlist, get_stack_adj(), get_c_opcode()});
+      CM_POPRET:
+        binary = $sformatf("%4h", {get_func3(), 5'b1_1110, rlist, get_stack_adj(), get_c_opcode()});
+      CM_MVSA01:
+        binary = $sformatf("%4h", {get_func3(), 3'b011, sreg1, 2'b01, sreg2, get_c_opcode()});
+      CM_MVA01S:
+        binary = $sformatf("%4h", {get_func3(), 3'b011, sreg1, 2'b11, sreg2, get_c_opcode()});
+      CM_JT:
+        binary = $sformatf("%4h", {get_func3(), 3'b000, imm[7:0], get_c_opcode()});
+      CM_JALT:
+        binary = $sformatf("%4h", {get_func3(), 3'b000, imm[7:0], get_c_opcode()});
       default : `uvm_fatal(`gfn, $sformatf("Unsupported instruction %0s", instr_name.name()))
     endcase
     return {prefix, binary};
@@ -332,14 +455,18 @@ class riscv_compressed_instr extends riscv_instr;
   virtual function bit [1:0] get_c_opcode();
     case (instr_name) inside
       C_ADDI4SPN, C_LQ, C_LW,
-      C_LD, C_SQ, C_SW, C_SD                          : get_c_opcode = 2'b00;
+      C_LD, C_SQ, C_SW, C_SD,
+      C_LBU, C_LH, C_LHU, C_SB, C_SH                  : get_c_opcode = 2'b00;
       C_NOP, C_ADDI, C_JAL, C_ADDIW, C_LI, C_ADDI16SP,
       C_LUI, C_SRLI, C_SRLI64, C_SRAI, C_SRAI64,
       C_ANDI, C_SUB, C_XOR, C_OR, C_AND, C_SUBW,
-      C_ADDW, C_J, C_BEQZ, C_BNEZ                     : get_c_opcode = 2'b01;
+      C_ADDW, C_J, C_BEQZ, C_BNEZ, C_ZEXT_B, C_SEXT_B,
+      C_ZEXT_H, C_SEXT_H, C_ZEXT_W, C_MUL, C_NOT      : get_c_opcode = 2'b01;
       C_SLLI, C_SLLI64, C_LQSP, C_LWSP,
       C_LDSP, C_JR, C_MV, C_EBREAK, C_JALR,
-      C_ADD, C_SQSP, C_SWSP, C_SDSP                   : get_c_opcode = 2'b10;
+      C_ADD, C_SQSP, C_SWSP, C_SDSP,
+      CM_PUSH, CM_POP, CM_POPRETZ, CM_POPRET,
+      CM_MVSA01, CM_MVA01S                            : get_c_opcode = 2'b10;
       default : `uvm_fatal(`gfn, $sformatf("Unsupported instruction %0s", instr_name.name()))
     endcase
   endfunction : get_c_opcode
@@ -387,6 +514,26 @@ class riscv_compressed_instr extends riscv_instr;
       C_SQSP     : get_func3 = 3'b101;
       C_SWSP     : get_func3 = 3'b110;
       C_SDSP     : get_func3 = 3'b111;
+      C_LBU      : get_func3 = 3'b100;
+      C_LHU      : get_func3 = 3'b100;
+      C_LH       : get_func3 = 3'b100;
+      C_SB       : get_func3 = 3'b100;
+      C_SH       : get_func3 = 3'b100;
+      C_ZEXT_B   : get_func3 = 3'b100;
+      C_SEXT_B   : get_func3 = 3'b100;
+      C_ZEXT_H   : get_func3 = 3'b100;
+      C_SEXT_H   : get_func3 = 3'b100;
+      C_ZEXT_W   : get_func3 = 3'b100;
+      C_MUL      : get_func3 = 3'b100;
+      C_NOT      : get_func3 = 3'b100;
+      CM_PUSH    : get_func3 = 3'b101;
+      CM_POP     : get_func3 = 3'b101;
+      CM_POPRETZ : get_func3 = 3'b101;
+      CM_POPRET  : get_func3 = 3'b101;
+      CM_MVA01S  : get_func3 = 3'b101;
+      CM_MVSA01  : get_func3 = 3'b101;
+      CM_JT      : get_func3 = 3'b101;
+      CM_JALT    : get_func3 = 3'b101;
       default : `uvm_fatal(`gfn, $sformatf("Unsupported instruction %0s", instr_name.name()))
     endcase
   endfunction : get_func3

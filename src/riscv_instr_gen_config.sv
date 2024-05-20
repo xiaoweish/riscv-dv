@@ -126,7 +126,7 @@ class riscv_instr_gen_config extends uvm_object;
   };
 
   // Stack section word length
-  int stack_len = 5000;
+  int stack_len = 10000;
 
   //-----------------------------------------------------------------------------
   // Kernel section setting, used by supervisor mode programs
@@ -178,6 +178,8 @@ class riscv_instr_gen_config extends uvm_object;
   int                    num_of_harts = NUM_HARTS;
   // Use SP as stack pointer
   bit                    fix_sp;
+  // Use RA as return address
+  bit                    fix_ra;
   // Use push/pop section for data pages
   bit                    use_push_data_section = 0;
   // Directed boot privileged mode, u, m, s
@@ -189,6 +191,8 @@ class riscv_instr_gen_config extends uvm_object;
   // Enable interrupt bit in MSTATUS (MIE, SIE, UIE)
   bit                    enable_interrupt;
   bit                    enable_nested_interrupt;
+  // Enable clic interrupt support (note: disables clint support)
+  bit                    enable_clic;
   // We need a separate control knob for enabling timer interrupts, as Spike
   // throws an exception if xIE.xTIE is enabled
   bit                    enable_timer_irq;
@@ -243,8 +247,8 @@ class riscv_instr_gen_config extends uvm_object;
   bit                    set_mstatus_mprv;
   // Stack space allocated to each program, need to be enough to store necessary context
   // Example: RA, SP, T0
-  int                    min_stack_len_per_program = 10 * (XLEN/8);
-  int                    max_stack_len_per_program = 16 * (XLEN/8);
+  int                    min_stack_len_per_program = 128 * (XLEN/8);//10 * (XLEN/8);
+  int                    max_stack_len_per_program = 256 * (XLEN/8);//16 * (XLEN/8);
   // Maximum branch distance, avoid skipping large portion of the code
   int                    max_branch_step = 20;
   // Maximum directed instruction stream sequence count
@@ -339,6 +343,15 @@ class riscv_instr_gen_config extends uvm_object;
     }
   }
 
+  constraint mtvec_mode_c {
+    if (enable_clic == 1) {
+      mtvec_mode == CLIC;
+    }
+    else {
+      mtvec_mode inside { DIRECT, VECTORED };
+    }
+  }
+
   constraint mtvec_c {
     mtvec_mode inside {supported_interrupt_mode};
     if (mtvec_mode == DIRECT) {
@@ -409,7 +422,12 @@ class riscv_instr_gen_config extends uvm_object;
   }
 
   constraint ra_c {
-    ra dist {RA := 3, T1 := 2, [SP:T0] :/ 1, [T2:T6] :/ 4};
+    if (fix_ra) {
+      ra == RA;
+    }
+    else {
+      ra dist {RA := 3, T1 := 2, [SP:T0] :/ 1, [T2:T6] :/ 4};
+    }
     ra != sp;
     ra != tp;
     ra != ZERO;
@@ -420,8 +438,8 @@ class riscv_instr_gen_config extends uvm_object;
       sp == SP;
     }
     sp != tp;
-    !(sp inside {GP, RA, ZERO});
-    !(tp inside {GP, RA, ZERO});
+    !(sp inside {GP, RA, ZERO, A0});
+    !(tp inside {GP, RA, ZERO, A0});
   }
 
   // This reg is used in various places throughout the generator,
@@ -495,6 +513,7 @@ class riscv_instr_gen_config extends uvm_object;
     `uvm_field_int(no_fence, UVM_DEFAULT)
     `uvm_field_int(no_wfi, UVM_DEFAULT)
     `uvm_field_int(fix_sp, UVM_DEFAULT)
+    `uvm_field_int(fix_ra, UVM_DEFAULT)
     `uvm_field_int(enable_unaligned_load_store, UVM_DEFAULT)
     `uvm_field_int(illegal_instr_ratio, UVM_DEFAULT)
     `uvm_field_int(hint_instr_ratio, UVM_DEFAULT)
@@ -505,6 +524,7 @@ class riscv_instr_gen_config extends uvm_object;
     `uvm_field_string(boot_mode_opts, UVM_DEFAULT)
     `uvm_field_int(enable_page_table_exception, UVM_DEFAULT)
     `uvm_field_int(no_directed_instr, UVM_DEFAULT)
+    `uvm_field_int(enable_clic, UVM_DEFAULT)
     `uvm_field_int(enable_interrupt, UVM_DEFAULT)
     `uvm_field_int(enable_timer_irq, UVM_DEFAULT)
     `uvm_field_int(bare_program_mode, UVM_DEFAULT)
@@ -565,6 +585,7 @@ class riscv_instr_gen_config extends uvm_object;
     get_bool_arg_value("+no_load_store=", no_load_store);
     get_bool_arg_value("+no_csr_instr=", no_csr_instr);
     get_bool_arg_value("+fix_sp=", fix_sp);
+    get_bool_arg_value("+fix_ra=", fix_ra);
     get_bool_arg_value("+use_push_data_section=", use_push_data_section);
     get_bool_arg_value("+enable_illegal_csr_instruction=", enable_illegal_csr_instruction);
     get_bool_arg_value("+enable_access_invalid_csr_level=", enable_access_invalid_csr_level);
@@ -606,6 +627,7 @@ class riscv_instr_gen_config extends uvm_object;
     get_bool_arg_value("+set_mstatus_mprv=", set_mstatus_mprv);
     get_bool_arg_value("+enable_floating_point=", enable_floating_point);
     get_bool_arg_value("+enable_vector_extension=", enable_vector_extension);
+    get_bool_arg_value("+enable_clic=", enable_clic);
     get_bool_arg_value("+enable_b_extension=", enable_b_extension);
     get_bool_arg_value("+enable_zba_extension=", enable_zba_extension);
     get_bool_arg_value("+enable_zbb_extension=", enable_zbb_extension);
@@ -633,7 +655,11 @@ class riscv_instr_gen_config extends uvm_object;
     cmdline_enum_processor #(riscv_instr_group_t)::get_array_values("+march=", 1'b0, march_isa);
     if (march_isa.size != 0) riscv_instr_pkg::supported_isa = march_isa;
 
-    if (!(RV32C inside {supported_isa})) begin
+    if (!(RV32C inside {supported_isa}) &&
+        !(RV32ZCA inside {supported_isa}) &&
+        !(RV32ZCB inside {supported_isa}) &&
+        !(RV32ZCMP inside {supported_isa}) &&
+        !(RV32ZCMT inside {supported_isa})) begin
       disable_compressed_instr = 1;
     end
 
@@ -722,9 +748,9 @@ class riscv_instr_gen_config extends uvm_object;
 
   function void post_randomize();
     // Setup the list all reserved registers
-    reserved_regs = {tp, sp, scratch_reg};
+    reserved_regs = {tp, sp, scratch_reg, A0};
     // Need to save all loop registers, and RA/T0
-    min_stack_len_per_program = 2 * (XLEN/8);
+    min_stack_len_per_program = 128 * (XLEN/8);
     // Check if the setting is legal
     check_setting();
   endfunction

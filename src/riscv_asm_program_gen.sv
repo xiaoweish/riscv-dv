@@ -324,9 +324,9 @@ class riscv_asm_program_gen extends uvm_object;
     instr_stream.push_back(".include \"user_define.h\"");
     instr_stream.push_back(".globl _start");
     instr_stream.push_back(".section .text");
-    if (cfg.disable_compressed_instr) begin
-      instr_stream.push_back(".option norvc;");
-    end
+    //if (cfg.disable_compressed_instr) begin
+    //  instr_stream.push_back(".option norvc;");
+    //end
     str.push_back(".include \"user_init.s\"");
     str.push_back($sformatf("csrr x5, 0x%0x", MHARTID));
     for (int hart = 0; hart < cfg.num_of_harts; hart++) begin
@@ -459,6 +459,7 @@ class riscv_asm_program_gen extends uvm_object;
         RV32X, RV64X         : misa[MISA_EXT_X] = 1'b1;
         RV32ZBA, RV32ZBB, RV32ZBC, RV32ZBS,
         RV64ZBA, RV64ZBB, RV64ZBC, RV64ZBS : ; // No Misa bit for Zb* extensions
+        RV32ZCA, RV32ZCB, RV32ZCBB, RV32ZCBM, RV32ZCMP, RV32ZCMT : ; //
         default : `uvm_fatal(`gfn, $sformatf("%0s is not yet supported",
                                    supported_isa[i].name()))
       endcase
@@ -741,6 +742,11 @@ class riscv_asm_program_gen extends uvm_object;
     // Setup kerenal stack pointer
     str = {$sformatf("la x%0d, %0skernel_stack_end", cfg.tp, hart_prefix(hart))};
     gen_section(get_label("kernel_sp", hart), str);
+
+    // Init stack pointer to point to the end of the user stack
+    str = {indent, $sformatf("la x%0d, %0suser_stack_end", cfg.sp, hart_prefix(hart))};
+    gen_section(get_label("user_sp", hart), str);
+
     // Setup interrupt and exception delegation
     if(!cfg.no_delegation && (cfg.init_privileged_mode != MACHINE_MODE)) begin
       gen_delegation(hart);
@@ -954,6 +960,24 @@ class riscv_asm_program_gen extends uvm_object;
   endfunction
 
   //---------------------------------------------------------------------------------------
+  // Generate mtvt table
+  //---------------------------------------------------------------------------------------
+  virtual function void gen_mtvt_table(int hart);
+    string instr[$];
+
+    instr_stream.push_back($sformatf(".align 7"));
+    for  (int i = 0; i < 255; i++) begin
+      instr = {instr,
+               $sformatf("idx_%0d: .long . + %0d", i, (255 - i)*4)
+      };
+    end
+
+    instr = {instr, $sformatf("j mtvec_handler")};
+
+    gen_section(get_label("__mtvt_table", hart), instr);
+  endfunction : gen_mtvt_table
+
+  //---------------------------------------------------------------------------------------
   // Exception handling routine
   //---------------------------------------------------------------------------------------
 
@@ -1106,6 +1130,10 @@ class riscv_asm_program_gen extends uvm_object;
              $sformatf("jalr x1, x%0d, 0", cfg.scratch_reg)
            };
     gen_section(get_label($sformatf("%0smode_exception_handler", mode), hart), instr);
+
+    if (cfg.mtvec_mode == CLIC) begin
+      gen_mtvt_table(hart);
+    end
   endfunction
 
   // Generate for interrupt vector table
@@ -1123,15 +1151,17 @@ class riscv_asm_program_gen extends uvm_object;
     // software interrupts, are vectored to the same location as synchronous exceptions. This
     // ambiguity does not arise in practice, since user-mode software interrupts are either
     // disabled or delegated
-    instr = {instr, ".option norvc;",
-                    $sformatf("j %0s%0smode_exception_handler", hart_prefix(hart), mode)};
+    // TODO: Test
+    //instr = {instr, ".option norvzca;",
+    instr = {
+      $sformatf("jal x0, %0s%0smode_exception_handler", hart_prefix(hart), mode)};
     // Redirect the interrupt to the corresponding interrupt handler
     for (int i = 1; i < max_interrupt_vector_num; i++) begin
-      instr.push_back($sformatf("j %0s%0smode_intr_vector_%0d", hart_prefix(hart), mode, i));
+      instr.push_back($sformatf("jal x0, %0s%0smode_intr_vector_%0d", hart_prefix(hart), mode, i));
     end
-    if (!cfg.disable_compressed_instr) begin
-      instr = {instr, ".option rvc;"};
-    end
+    //if (!cfg.disable_compressed_instr) begin
+    //  instr = {instr, ".option rvzca;"};
+    //end
     for (int i = 1; i < max_interrupt_vector_num; i++) begin
       string intr_handler[$];
       push_gpr_to_kernel_stack(status, scratch, cfg.mstatus_mprv, cfg.sp, cfg.tp, intr_handler);

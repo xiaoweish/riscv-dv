@@ -97,7 +97,7 @@ class riscv_pmp_cfg extends uvm_object;
   /////////////////////////////////////////////////
 
   constraint sanity_c {
-    pmp_num_regions inside {[1 : 16]};
+    pmp_num_regions inside {[1 : 64]};
     pmp_granularity inside {[0 : XLEN + 3]};
   }
 
@@ -1019,18 +1019,24 @@ class riscv_pmp_cfg extends uvm_object;
       // address of <main>, guaranteeing that the random value written to
       // pmpaddr[i] doesn't interfere with the safe region.
       `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(pmp_val, pmp_val[31] == 1'b0;)
-      instr.push_back($sformatf("li x%0d, 0x%0x", scratch_reg[0], pmp_val));
-      instr.push_back($sformatf("la x%0d, main", scratch_reg[1]));
-      instr.push_back($sformatf("add x%0d, x%0d, x%0d",
-                                scratch_reg[0], scratch_reg[0], scratch_reg[1]));
-      // Write the randomized address to pmpaddr[i].
-      // Original value of pmpaddr[i] will be written to scratch_reg[0].
-      instr.push_back($sformatf("csrrw x%0d, 0x%0x, x%0d",
-                                scratch_reg[0], pmp_addr, scratch_reg[0]));
-      // Restore the original address to pmpaddr[i].
-      // New value of pmpaddr[i] will be written to scratch_reg[0].
-      instr.push_back($sformatf("csrrw x%0d, 0x%0x, x%0d",
-                                scratch_reg[0], pmp_addr, scratch_reg[0]));
+
+      // don't touch base and base - 1 due to MMWP and TOR-matching
+      if (!((pmp_addr == base_pmp_addr) || (pmp_addr == base_pmp_addr - 1))) begin
+
+        instr.push_back($sformatf("li x%0d, 0x%0x", scratch_reg[0], pmp_val));
+        instr.push_back($sformatf("la x%0d, main", scratch_reg[1]));
+        instr.push_back($sformatf("add x%0d, x%0d, x%0d",
+                                  scratch_reg[0], scratch_reg[0], scratch_reg[1]));
+        // Write the randomized address to pmpaddr[i].
+        // Original value of pmpaddr[i] will be written to scratch_reg[0].
+        instr.push_back($sformatf("csrrw x%0d, 0x%0x, x%0d",
+                                  scratch_reg[0], pmp_addr, scratch_reg[0]));
+        // Restore the original address to pmpaddr[i].
+        // New value of pmpaddr[i] will be written to scratch_reg[0].
+        instr.push_back($sformatf("csrrw x%0d, 0x%0x, x%0d",
+                                  scratch_reg[0], pmp_addr, scratch_reg[0]));
+
+      end
       // Randomize value to be written to pmpcfg CSR.
       //
       // TODO: support rv64.
